@@ -20,18 +20,22 @@ HTDOCS=/htdocs
 APACHE_ROOT=/etc/apache2/
 SERVER_ROOT=/var/www/localhost
 TEMPLATE_ROOT=/var/www/skel
-PHP_INI=/etc/php7/php.ini
+PHP_INI=/etc/php5/php.ini
 
-DIRECTORIES=(/cgi-bin ${HTDOCS} /logs ${ERROR})
+if [[ ! -z ${APACHE_WEB_ROOT} ]]; then
+    HTDOCS=/${APACHE_WEB_ROOT}
+fi
 
 #
 # Checks if required folder exists. If not, it will be created.
 #
 function create_directories {
+    DIRECTORIES=(/cgi-bin ${HTDOCS} /logs ${ERROR})
+
     for DIRECTORY in ${DIRECTORIES[@]}; do
         DIRECTORY_PATH="${SERVER_ROOT}${DIRECTORY}"
-        if [ ! -d ${DIRECTORY_PATH} ]; then
-            mkdir ${DIRECTORY_PATH}
+        if [[ ! -d ${DIRECTORY_PATH} ]]; then
+            mkdir -p ${DIRECTORY_PATH}
             echo "Created directory ${DIRECTORY}"
         fi
     done
@@ -41,14 +45,14 @@ function create_directories {
 # Check if error folder is empty. If not, it will create error pages.
 #
 function create_error_pages {
-    if [ ! "$(ls -A "${SERVER_ROOT}${ERROR}")" ]; then
+    if [[ ! "$(ls -A "${SERVER_ROOT}${ERROR}")" ]]; then
         cp -r ${TEMPLATE_ROOT}${ERROR} ${SERVER_ROOT}
         echo "Created error pages.";
     fi
 }
 
 function create_public_directory {
-    if [ ! -z ${PUBLIC_DIRECTORY} ]; then
+    if [[ ! -z ${PUBLIC_DIRECTORY} ]]; then
         PUBLIC_DIRECTORY_PATH=${SERVER_ROOT}${HTDOCS}/${PUBLIC_DIRECTORY}
         sed -i "s/\"\/var\/www\/localhost\/htdocs\"/\"\/var\/www\/localhost\/htdocs\/${PUBLIC_DIRECTORY}\"/" ${APACHE_ROOT}/httpd.conf
         sed -i "s/\"\/var\/www\/localhost\/htdocs\"/\"\/var\/www\/localhost\/htdocs\/${PUBLIC_DIRECTORY}\"/" ${APACHE_ROOT}/conf.d/ssl.conf
@@ -61,17 +65,17 @@ function create_public_directory {
 }
 
 function create_default_page {
-    if [ -z ${PUBLIC_DIRECTORY} ] && [ -z "$(ls -A ${SERVER_ROOT}${HTDOCS})" ]; then
-        cp ${TEMPLATE_ROOT}${HTDOCS}/index.html ${SERVER_ROOT}${HTDOCS}/index.html
+    if [[ -z ${PUBLIC_DIRECTORY} ]] && [[ -z "$(ls -A ${SERVER_ROOT}${HTDOCS})" ]]; then
+        cp ${TEMPLATE_ROOT}/htdocs/index.html ${SERVER_ROOT}${HTDOCS}/index.html
         echo "Created default pages."
-    elif [ ! -z ${PUBLIC_DIRECTORY} ] && [ -z "$(ls -A ${SERVER_ROOT}${HTDOCS}/${PUBLIC_DIRECTORY})" ]; then
-        cp ${TEMPLATE_ROOT}${HTDOCS}/index.html ${SERVER_ROOT}${HTDOCS}/${PUBLIC_DIRECTORY}/index.html
+    elif [[ ! -z ${PUBLIC_DIRECTORY} ]] && [[ -z "$(ls -A ${SERVER_ROOT}${HTDOCS}/${PUBLIC_DIRECTORY})" ]]; then
+        cp ${TEMPLATE_ROOT}/htdocs/index.html ${SERVER_ROOT}${HTDOCS}/${PUBLIC_DIRECTORY}/index.html
         echo "Created default pages."
     fi
 }
 
 function set_server_name {
-    if [ ! -z ${APACHE_SERVER_NAME} ]; then
+    if [[ ! -z ${APACHE_SERVER_NAME} ]]; then
         sed -i "s/ServerName www.example.com:80/ServerName ${APACHE_SERVER_NAME}:80/" ${APACHE_ROOT}/httpd.conf
         sed -i "s/ServerName www.example.com:443/ServerName ${APACHE_SERVER_NAME}:443/" ${APACHE_ROOT}/conf.d/ssl.conf
         echo "Set server name to ${APACHE_SERVER_NAME}."
@@ -79,29 +83,35 @@ function set_server_name {
 }
 
 function set_server_mail {
-    if [ ! -z ${APACHE_SERVER_MAIL} ]; then
+    if [[ ! -z ${APACHE_SERVER_MAIL} ]]; then
         sed -i "s/ServerAdmin .*/ServerAdmin ${APACHE_SERVER_MAIL}/" ${APACHE_ROOT}/httpd.conf
         sed -i "s/ServerAdmin .*/ServerAdmin ${APACHE_SERVER_MAIL}/" ${APACHE_ROOT}/conf.d/ssl.conf
         echo "Set server email to ${APACHE_SERVER_MAIL}."
-    elif [ ! -z ${APACHE_SERVER_NAME} ]; then
+    elif [[ ! -z ${APACHE_SERVER_NAME} ]]; then
         sed -i "s/ServerAdmin .*/ServerAdmin webmaster@${APACHE_SERVER_NAME}/" ${APACHE_ROOT}/httpd.conf
         sed -i "s/ServerAdmin .*/ServerAdmin webmaster@${APACHE_SERVER_NAME}/" ${APACHE_ROOT}/conf.d/ssl.conf
         echo "Set server email to webmaster@${APACHE_SERVER_NAME}."
     fi
 }
 
-function set_user_and_group {
-    if [ ! -z ${APACHE_RUN_USER} ]; then
+function set_web_root {
+    if [[ ! -z ${APACHE_WEB_ROOT} ]] && [[ -z ${PUBLIC_DIRECTORY} ]]; then
+        sed -i "s/\/var\/www\/localhost\/htdocs/\/var\/www\/localhost\/${APACHE_WEB_ROOT}/" ${APACHE_ROOT}/httpd.conf
+        sed -i "s/\/var\/www\/localhost\/htdocs/\/var\/www\/localhost\/${APACHE_WEB_ROOT}/" ${APACHE_ROOT}/conf.d/ssl.conf
+    fi
+}
 
-        if [ -z ${APACHE_RUN_GROUP} ]; then
+function set_user_and_group {
+    if [[ ! -z ${APACHE_RUN_USER} ]]; then
+
+        if [[ -z ${APACHE_RUN_GROUP} ]]; then
             APACHE_RUN_GROUP=apache
         fi
 
         sed -i "s/User apache/User ${APACHE_RUN_USER}/" ${APACHE_ROOT}/httpd.conf
         sed -i "s/Group apache/Group ${APACHE_RUN_GROUP}/" ${APACHE_ROOT}/httpd.conf
 
-
-        if [ ! -z ${APACHE_RUN_USER_ID} ] && [ ! -z ${APACHE_RUN_GROUP_ID} ]; then
+        if [[ ! -z ${APACHE_RUN_USER_ID} ]] && [[ ! -z ${APACHE_RUN_GROUP_ID} ]]; then
             addgroup -g ${APACHE_RUN_GROUP_ID} ${APACHE_RUN_GROUP} > /dev/null 2>&1
             adduser -u ${APACHE_RUN_USER_ID} -G ${APACHE_RUN_GROUP} -h ${SERVER_ROOT} ${APACHE_RUN_USER} > /dev/null 2>&1
         else
@@ -118,7 +128,6 @@ function set_user_and_group {
 
     chown -R ${APACHE_RUN_USER}:${APACHE_RUN_GROUP} ${SERVER_ROOT}/${HTDOCS}
 }
-
 
 function set_ssl {
     if [[ -n ${APACHE_SSL_CERTIFICATE} && -n ${APACHE_SSL_CERTIFICATE_KEY} && -n ${APACHE_SSL_CERTIFICATE_CHAIN} ]] ; then
@@ -206,6 +215,7 @@ create_default_page
 
 set_server_name
 set_server_mail
+set_web_root
 set_user_and_group
 set_ssl
 
