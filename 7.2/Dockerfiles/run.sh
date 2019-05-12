@@ -221,6 +221,7 @@ function runApache {
 # Starting Postfix daemon
 #
 function runPostfix {
+    echo "Started Postfix daemon."
     /usr/sbin/postfix start
 }
 
